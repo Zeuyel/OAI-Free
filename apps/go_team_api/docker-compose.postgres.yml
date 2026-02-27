@@ -1,0 +1,23 @@
+services:
+  team-postgres:
+    image: postgres:16-alpine
+    container_name: go-team-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teamuser
+      POSTGRES_PASSWORD: teampass
+      POSTGRES_DB: teamdb
+      TZ: UTC
+    ports:
+      - "55432:5432"
+    volumes:
+      - team_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teamuser -d teamdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  team_postgres_data:
+

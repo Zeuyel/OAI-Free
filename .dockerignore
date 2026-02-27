@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+.vscode/
+1.3.4_0/
+stripe_playwright_capture.json
+stripe_manual_result.json
+web_session_trace.json
+trial_checkout_capture.json
+hcaptcha_*.json

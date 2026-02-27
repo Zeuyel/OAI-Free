@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Go Team Auto Login</title>
+  <style>
+    body { margin: 0; padding: 12px; min-width: 360px; font: 13px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif; color: #111; background: #f7f8fa; }
+    .card { background: #fff; border: 1px solid #d9dee6; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    h1 { margin: 0 0 8px; font-size: 15px; }
+    h2 { margin: 0 0 8px; font-size: 13px; }
+    label { display: block; margin: 6px 0 4px; color: #4b5563; font-size: 12px; }
+    input, select { width: 100%; padding: 8px; border: 1px solid #cfd6e1; border-radius: 8px; background: #fff; box-sizing: border-box; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .actions { display: flex; gap: 8px; margin-top: 8px; }
+    button { flex: 1; border: 1px solid #2f3a4a; background: #fff; color: #111; border-radius: 8px; padding: 8px; cursor: pointer; font-weight: 600; }
+    button.primary { background: #111827; color: #fff; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    pre { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; background: #0b1220; color: #d7e0ef; border-radius: 8px; padding: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Go Team Auto Login</h1>
+    <label for="apiBase">Go API Base</label>
+    <input id="apiBase" placeholder="http://127.0.0.1:18081" />
+    <label for="apiKey">API Key（operator/admin）</label>
+    <input id="apiKey" placeholder="X-Api-Key" />
+    <div class="row">
+      <div>
+        <label for="autoFetchOtp">自动取件 OTP</label>
+        <select id="autoFetchOtp">
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      </div>
+      <div>
+        <label for="otpTimeoutSeconds">OTP 超时（秒）</label>
+        <input id="otpTimeoutSeconds" type="number" min="15" max="300" step="1" value="120" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="saveBtn">保存配置</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>账号池</h2>
+    <div class="row">
+      <div>
+        <label for="accountType">账号类型</label>
+        <select id="accountType">
+          <option value="">全部</option>
+          <option value="normal">normal</option>
+          <option value="team">team</option>
+        </select>
+      </div>
+      <div>
+        <label for="onlyInvitePool">仅 invite_pool</label>
+        <select id="onlyInvitePool">
+          <option value="false">false</option>
+          <option value="true">true</option>
+        </select>
+      </div>
+    </div>
+    <label for="accountSelect">账号列表</label>
+    <select id="accountSelect">
+      <option value="">(请先加载账号)</option>
+    </select>
+    <div class="actions">
+      <button id="loadAccountsBtn">加载账号</button>
+      <button id="loadCredBtn">加载凭据</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>当前凭据（只读）</h2>
+    <label for="credEmail">Email</label>
+    <input id="credEmail" readonly />
+    <label for="credPassword">Password</label>
+    <input id="credPassword" readonly />
+    <div class="actions">
+      <button id="copyEmailBtn">复制账号</button>
+      <button id="copyPasswordBtn">复制密码</button>
+    </div>
+    <div class="actions">
+      <button id="autoLoginBtn" class="primary">自动登录（同标签页）</button>
+    </div>
+    <label for="lastSuccessInfo">订阅成功检测</label>
+    <input id="lastSuccessInfo" readonly placeholder="尚未检测到 success-team 页面" />
+    <label for="accessTokenOut">当前账号 Access Token</label>
+    <input id="accessTokenOut" readonly placeholder="检测成功页后自动更新" />
+    <div class="actions">
+      <button id="copyAccessTokenBtn">复制 Access Token</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>日志</h2>
+    <pre id="log"></pre>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+__pycache__/
+*.pyc
+.playwright-mcp/
+
+# Runtime artifacts
+web_session_trace.json
+stripe_manual_result.json
+stripe_playwright_capture.json
+stripe_manual_cookies_cookie_editor.json
+access_token_toolkit_result.json
+trial_protocol_result.json
+trial_checkout_capture.json
+stripe_protocol_result.json
+artifacts/*
+!artifacts/.gitkeep
+
+# Local env / secrets
+**/.env
+!**/.env.example
+
+# Local binaries / logs
+*.exe
+*.log
+
+# Local account exports
+**/registered_accounts.csv
+
+# Local notebook copies with real secrets
+**/*.local.ipynb
+
+# Legacy code kept locally only, do not track to remote
+legacy/

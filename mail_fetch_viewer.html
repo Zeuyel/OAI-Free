@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mail Fetch Viewer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: #f5f5f5;
+      color: #111;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 14px; }
+    .title { font-size: 20px; font-weight: 700; margin: 4px 0 12px; }
+    .grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; }
+    .grid > .card { min-width: 0; overflow: hidden; }
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .section { margin-bottom: 10px; }
+    .section h3 { margin: 6px 0 8px; font-size: 13px; color: #444; font-weight: 600; }
+    .row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .row > * { flex: 1; min-width: 0; }
+    input, select, textarea, button {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      color: #111;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    textarea { min-height: 84px; resize: vertical; }
+    button {
+      background: #eee;
+      border-color: #ccc;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: #f0f0f0; border-color: #ccc; }
+    button.warn { background: #f0f0f0; border-color: #ccc; }
+    .muted { color: #666; font-size: 12px; }
+    .status { font-size: 12px; margin-top: 6px; }
+    .status.ok { color: #111; }
+    .status.warn { color: #111; }
+    .status.err { color: #111; }
+    .mail-list {
+      max-height: 300px;
+      overflow: auto;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .mail-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+    .mail-item:hover { background: #f6f6f6; }
+    .mail-item.active { background: #f0f0f0; }
+    .mail-item .s { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mail-item .m { font-size: 11px; color: #666; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .render-frame {
+      width: 100%;
+      max-width: 760px;
+      height: 420px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #fff;
+      display: block;
+      margin: 0 auto;
+    }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .meta div { font-size: 12px; }
+    .meta b { color: #111; }
+    .small { font-size: 11px; color: #666; }
+    #metaSubject, #metaFrom, #metaTo, #metaCreated, #metaOtp { word-break: break-all; }
+
+    @media (max-width: 1080px) {
+      .grid { grid-template-columns: 1fr; }
+      .render-frame { max-width: 100%; height: 360px; }
+      .meta { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">邮件取件调试（RawData 渲染）</div>
+    <div class="grid">
+      <div class="card">
+        <div class="section">
+          <h3>配置来源</h3>
+          <div class="row">
+            <button id="btnLoadCfg">读取 legacy/extension_backend/config.json</button>
+            <button class="secondary" id="btnLoadAccounts">读取 legacy/extension_backend/accounts.txt</button>
+          </div>
+          <div class="small">建议用本地 HTTP 服务打开本页（不要 file:// 直接打开）</div>
+        </div>
+
+        <div class="section">
+          <h3>CF Worker</h3>
+          <label class="small">Worker Domain</label>
+          <input id="workerDomain" value="cf-temp-email.mengcenfay.workers.dev" placeholder="cf-temp-email.mengcenfay.workers.dev" />
+          <label class="small">Admin Password (x-admin-auth)</label>
+          <input id="adminPass" value="" placeholder="<MAIL_ADMIN_PASSWORD>" />
+          <label class="small">Email Domain</label>
+          <input id="emailDomain" value="agibar.x10.mx" placeholder="agibar.x10.mx" />
+        </div>
+
+        <div class="section">
+          <h3>邮箱 / Token</h3>
+          <label class="small">创建邮箱名称（可选，仅本地名，不含 @domain）</label>
+          <input id="createName" placeholder="例如: mymail123" />
+          <div class="small" style="margin:4px 0 8px;">填写后将按该名称创建；留空则随机创建。</div>
+          <label class="small">从 accounts.txt 选择账号（只取邮箱）</label>
+          <select id="accountSelect">
+            <option value="">(未加载)</option>
+          </select>
+          <div class="row" style="margin-top:8px;">
+            <button id="btnUseSelected">使用选中邮箱</button>
+            <button class="secondary" id="btnCreateTemp">创建临时邮箱</button>
+          </div>
+          <label class="small">当前邮箱地址</label>
+          <input id="emailAddress" placeholder="tmpxxx@agibar.x10.mx" />
+          <label class="small">Address JWT (Bearer)</label>
+          <textarea id="addressJwt" placeholder="通过 /admin/show_password/{id} 获取"></textarea>
+          <div class="row">
+            <button id="btnGetJwt">按邮箱获取 JWT</button>
+            <button class="secondary" id="btnPullMails">拉取邮件</button>
+          </div>
+          <div class="row">
+            <button class="warn" id="btnTogglePoll">开始轮询</button>
+            <input id="pollSec" type="number" min="2" max="60" value="5" />
+          </div>
+          <div id="status" class="status">等待操作</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section">
+          <h3>邮件列表（点击查看 rawData）</h3>
+          <div id="mailList" class="mail-list"></div>
+        </div>
+        <div class="section">
+          <div class="meta">
+            <div><b>Subject:</b> <span id="metaSubject">-</span></div>
+            <div><b>From:</b> <span id="metaFrom">-</span></div>
+            <div><b>To:</b> <span id="metaTo">-</span></div>
+            <div><b>Created:</b> <span id="metaCreated">-</span></div>
+            <div><b>OTP:</b> <span id="metaOtp">-</span></div>
+          </div>
+          <h3>邮件内容（自动渲染，失败则显示 rawData）</h3>
+          <iframe id="renderFrame" class="render-frame" sandbox="allow-same-origin"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { mails: [], activeIndex: -1, pollTimer: null, pollOn: false };
+    const DEFAULTS = {
+      workerDomain: "cf-temp-email.mengcenfay.workers.dev",
+      adminPass: "",
+      emailDomain: "agibar.x10.mx",
+    };
+
+    function setStatus(msg, type = "") {
+      const el = $("status");
+      el.textContent = msg;
+      el.className = "status " + (type || "");
+    }
+
+    async function safeFetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch {}
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+      }
+      return data ?? {};
+    }
+
+    function parseAccountsTxt(text) {
+      const lines = String(text || "").replace(/\r/g, "").split("\n");
+      const emails = [];
+      for (const lineRaw of lines) {
+        const line = lineRaw.trim();
+        if (!line || line.startsWith("#")) continue;
+        const p = line.split(":");
+        if (!p[0]) continue;
+        const email = p[0].trim();
+        if (email.includes("@")) emails.push(email);
+      }
+      return Array.from(new Set(emails));
+    }
+
+    async function loadConfig() {
+      const cfg = await safeFetchJSON("./legacy/extension_backend/config.json");
+      $("workerDomain").value = cfg.cf_worker_domain || DEFAULTS.workerDomain;
+      $("adminPass").value = cfg.cf_admin_password || DEFAULTS.adminPass;
+      $("emailDomain").value = cfg.cf_email_domain || DEFAULTS.emailDomain;
+      setStatus("已加载 config.json", "ok");
+    }
+
+    async function loadAccounts() {
+      const res = await fetch("./legacy/extension_backend/accounts.txt");
+      if (!res.ok) throw new Error("读取 accounts.txt 失败");
+      const text = await res.text();
+      const emails = parseAccountsTxt(text);
+      const sel = $("accountSelect");
+      sel.innerHTML = "";
+      if (!emails.length) {
+        sel.innerHTML = `<option value="">(无账号)</option>`;
+      } else {
+        sel.innerHTML = `<option value="">(请选择)</option>` + emails.map(e => `<option value="${e}">${e}</option>`).join("");
+      }
+      setStatus(`已加载账号 ${emails.length} 条`, "ok");
+    }
+
+    function getWorkerBase() {
+      const wd = $("workerDomain").value.trim();
+      if (!wd) throw new Error("workerDomain 为空");
+      return `https://${wd}`;
+    }
+
+    function genMailboxName() {
+      const letters = "abcdefghijklmnopqrstuvwxyz";
+      const digits = "0123456789";
+      const len = 12 + Math.floor(Math.random() * 4);
+      let s = "";
+      for (let i = 0; i < len; i++) {
+        s += letters[Math.floor(Math.random() * letters.length)];
+      }
+      const pos = 2 + Math.floor(Math.random() * Math.max(1, len - 2));
+      s = s.slice(0, pos) + digits[Math.floor(Math.random() * digits.length)] + s.slice(pos);
+      return s;
+    }
+
+    async function createTempEmail() {
+      const base = getWorkerBase();
+      const admin = $("adminPass").value.trim();
+      const domain = $("emailDomain").value.trim();
+      const customName = $("createName").value.trim();
+      const name = customName || genMailboxName();
+      if (!admin) throw new Error("admin password 为空");
+      if (!domain) throw new Error("email domain 为空");
+      const payload = {
+        enablePrefix: customName ? false : true,
+        name,
+        domain,
+      };
+      let data;
+      try {
+        data = await safeFetchJSON(`${base}/admin/new_address`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-auth": admin },
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        const msg = String(e && e.message ? e.message : e);
+        if (msg.includes("Required field is missing")) {
+          throw new Error("创建失败：Worker 要求 name/domain 必填。当前已自动生成 name，请检查 admin password 或 domain 是否正确。");
+        }
+        throw e;
+      }
+      $("emailAddress").value = data.address || "";
+      $("addressJwt").value = data.jwt || "";
+      setStatus(`已创建邮箱: ${data.address || "-"}${customName ? ` (指定名称: ${customName})` : " (随机名称)"}`, "ok");
+    }
+
+    async function getJwtByEmail() {
+      const base = getWorkerBase();
+      const admin = $("adminPass").value.trim();
+      const email = $("emailAddress").value.trim();
+      if (!admin) throw new Error("admin password 为空");
+      if (!email) throw new Error("邮箱为空");
+
+      const q = new URLSearchParams({ query: email, limit: "1", offset: "0" });
+      const list = await safeFetchJSON(`${base}/admin/address?${q.toString()}`, {
+        headers: { "x-admin-auth": admin },
+      });
+      const row = (list.results || [])[0];
+      if (!row || !row.id) throw new Error("未找到 address id");
+
+      const pw = await safeFetchJSON(`${base}/admin/show_password/${row.id}`, {
+        headers: { "x-admin-auth": admin },
+      });
+      const jwt = pw.jwt || "";
+      if (!jwt) throw new Error("show_password 未返回 jwt");
+      $("addressJwt").value = jwt;
+      setStatus("已通过 admin 查询到 address JWT", "ok");
+    }
+
+    function pick(obj, keys) {
+      for (const k of keys) {
+        const v = obj && obj[k];
+        if (v !== undefined && v !== null && String(v) !== "") return v;
+      }
+      return "";
+    }
+
+    function maybeBase64ToText(s) {
+      if (typeof s !== "string") return "";
+      const t = s.trim();
+      if (!/^[A-Za-z0-9+/=\s]+$/.test(t)) return "";
+      if (t.length < 24) return "";
+      try {
+        const bin = atob(t.replace(/\s+/g, ""));
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        const text = decodeBytesWithCharset(bytes, "utf-8");
+        const printable = (text.match(/[\x20-\x7E\u00A0-\uFFFF\r\n\t]/g) || []).length;
+        return text && printable / Math.max(1, text.length) > 0.86 ? text : "";
+      } catch {
+        return "";
+      }
+    }
+
+    function extractRawData(mail) {
+      const candidates = [
+        "rawData", "rawdata", "raw", "source", "mime", "eml", "message", "full",
+        "body", "html", "text"
+      ];
+      for (const k of candidates) {
+        const v = mail && mail[k];
+        if (typeof v === "string" && v.trim()) {
+          const b64 = maybeBase64ToText(v);
+          return b64 || v;
+        }
+      }
+      const nested = [
+        mail && mail.data, mail && mail.payload, mail && mail.content
+      ];
+      for (const n of nested) {
+        if (!n || typeof n !== "object") continue;
+        for (const k of candidates) {
+          const v = n[k];
+          if (typeof v === "string" && v.trim()) {
+            const b64 = maybeBase64ToText(v);
+            return b64 || v;
+          }
+        }
+      }
+      const deep = findDeepCandidate(mail, candidates, 0, 5);
+      if (deep) return deep;
+      return JSON.stringify(mail, null, 2);
+    }
+
+    function findDeepCandidate(node, keys, depth, maxDepth) {
+      if (!node || depth > maxDepth) return "";
+      if (typeof node === "string") return node.trim() ? node : "";
+      if (Array.isArray(node)) {
+        for (const v of node) {
+          const got = findDeepCandidate(v, keys, depth + 1, maxDepth);
+          if (got) return got;
+        }
+        return "";
+      }
+      if (typeof node !== "object") return "";
+
+      for (const k of keys) {
+        if (typeof node[k] === "string" && node[k].trim()) {
+          const b64 = maybeBase64ToText(node[k]);
+          return b64 || node[k];
+        }
+      }
+      for (const v of Object.values(node)) {
+        const got = findDeepCandidate(v, keys, depth + 1, maxDepth);
+        if (got) return got;
+      }
+      return "";
+    }
+
+    function decodeBase64ToBytes(input) {
+      if (typeof input !== "string") return new Uint8Array();
+      try {
+        const bin = atob(input.replace(/\s+/g, ""));
+        return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      } catch {
+        return new Uint8Array();
+      }
+    }
+
+    function decodeQuotedPrintableToBytes(input) {
+      if (typeof input !== "string") return new Uint8Array();
+      const s = input
+        .replace(/=\r?\n/g, "")
+        .replace(/=\s+(?==[A-Fa-f0-9]{2})/g, "");
+      const out = [];
+      for (let i = 0; i < s.length; i++) {
+        if (s[i] === "=" && /[A-Fa-f0-9]{2}/.test(s.slice(i + 1, i + 3))) {
+          out.push(parseInt(s.slice(i + 1, i + 3), 16));
+          i += 2;
+        } else {
+          out.push(s.charCodeAt(i) & 0xFF);
+        }
+      }
+      return new Uint8Array(out);
+    }
+
+    function decodeBytesWithCharset(bytes, charset = "utf-8") {
+      const c = String(charset || "").trim().toLowerCase();
+      const candidates = [c, "utf-8", "gb18030", "iso-8859-1"].filter(Boolean);
+      for (const cs of candidates) {
+        try {
+          return new TextDecoder(cs, { fatal: false }).decode(bytes);
+        } catch {}
+      }
+      return Array.from(bytes, (b) => String.fromCharCode(b)).join("");
+    }
+
+    function decodeRfc2047Words(s) {
+      if (typeof s !== "string" || !s.includes("=?")) return s || "";
+      return s.replace(/=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g, (_, charset, enc, payload) => {
+        try {
+          if (String(enc).toLowerCase() === "b") {
+            return decodeBytesWithCharset(decodeBase64ToBytes(payload), charset);
+          }
+          const q = String(payload).replace(/_/g, " ");
+          return decodeBytesWithCharset(decodeQuotedPrintableToBytes(q), charset);
+        } catch {
+          return _;
+        }
+      });
+    }
+
+    function splitHeaderBody(raw) {
+      const src = String(raw || "");
+      const idx = src.search(/\r?\n\r?\n/);
+      if (idx < 0) return { headerText: "", bodyText: src };
+      const sepLen = src[idx] === "\r" ? 4 : 2;
+      return { headerText: src.slice(0, idx), bodyText: src.slice(idx + sepLen) };
+    }
+
+    function parseHeaders(headerText) {
+      const lines = String(headerText || "").replace(/\r/g, "").split("\n");
+      const unfolded = [];
+      for (const line of lines) {
+        if (!line) continue;
+        if (/^[ \t]/.test(line) && unfolded.length) {
+          unfolded[unfolded.length - 1] += " " + line.trim();
+        } else {
+          unfolded.push(line);
+        }
+      }
+      const headers = {};
+      for (const line of unfolded) {
+        const i = line.indexOf(":");
+        if (i <= 0) continue;
+        const key = line.slice(0, i).trim().toLowerCase();
+        const value = line.slice(i + 1).trim();
+        headers[key] = headers[key] ? `${headers[key]}, ${value}` : value;
+      }
+      return headers;
+    }
+
+    function parseContentType(v) {
+      const text = decodeHtmlEntities(String(v || "text/plain"));
+      const [typeRaw, ...rest] = text.split(";");
+      const type = String(typeRaw || "text/plain").trim().toLowerCase();
+      const params = {};
+      const cont = {};
+
+      function decodePct(s) {
+        try { return decodeURIComponent(String(s || "")); } catch { return String(s || ""); }
+      }
+
+      function decode2231(s) {
+        const raw = String(s || "");
+        const m = raw.match(/^([^']*)'([^']*)'(.*)$/);
+        if (!m) return decodePct(raw);
+        const charset = m[1] || "utf-8";
+        const encoded = m[3] || "";
+        const bytes = Uint8Array.from(
+          decodePct(encoded).split("").map((ch) => ch.charCodeAt(0) & 0xFF)
+        );
+        return decodeBytesWithCharset(bytes, charset);
+      }
+
+      for (const seg of rest) {
+        const m = seg.match(/^\s*([^=]+)=\s*(.+)\s*$/);
+        if (!m) continue;
+        const k = String(m[1]).trim().toLowerCase();
+        let val = String(m[2]).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        const contMatch = k.match(/^([^*]+)\*(\d+)\*?$/);
+        if (contMatch) {
+          const name = contMatch[1];
+          const idx = Number(contMatch[2]);
+          const encoded = k.endsWith("*");
+          if (!cont[name]) cont[name] = [];
+          cont[name][idx] = encoded ? decode2231(val) : decodePct(val);
+          continue;
+        }
+        if (k.endsWith("*")) {
+          params[k.slice(0, -1)] = decode2231(val);
+        } else {
+          params[k] = val;
+        }
+      }
+
+      for (const [name, arr] of Object.entries(cont)) {
+        const joined = arr.filter((x) => x !== undefined).join("");
+        if (joined) params[name] = joined;
+      }
+      return { type, params };
+    }
+
+    function escapeRegExp(s) {
+      return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function extractMimePartLoose(raw, mime) {
+      const src = String(raw || "");
+      if (!src) return null;
+      const boundaryMatch = src.match(/boundary\s*=\s*"?([^";\r\n]+)"?/i);
+      if (!boundaryMatch) return null;
+      const boundary = boundaryMatch[1];
+      if (!boundary) return null;
+      const chunks = src.split(new RegExp(`--${escapeRegExp(boundary)}(?:--)?`, "g"));
+      for (const chunk of chunks) {
+        if (!new RegExp(`Content-Type:\\s*${mime}\\b`, "i").test(chunk)) continue;
+        let headerText = "";
+        let bodyText = "";
+        let cte = "";
+        let charset = "utf-8";
+
+        const sep = chunk.search(/\r?\n\r?\n/);
+        if (sep >= 0) {
+          const sepLen = chunk[sep] === "\r" ? 4 : 2;
+          headerText = chunk.slice(0, sep);
+          bodyText = chunk.slice(sep + sepLen);
+          const headers = parseHeaders(headerText);
+          const ct = parseContentType(headers["content-type"] || "");
+          cte = headers["content-transfer-encoding"] || "";
+          charset = ct.params.charset || "utf-8";
+        } else {
+          const flat = String(chunk || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          const cteMatch = flat.match(/Content-Transfer-Encoding:\s*([a-z0-9_-]+)\s+([\s\S]*)$/i);
+          if (cteMatch) {
+            cte = cteMatch[1] || "";
+            bodyText = cteMatch[2] || "";
+          } else {
+            const typeMatch = flat.match(new RegExp(`Content-Type:\\s*${mime}[^\\n]*\\s+([\\s\\S]*)$`, "i"));
+            bodyText = typeMatch ? (typeMatch[1] || "") : "";
+          }
+          const charsetMatch = flat.match(/charset\s*=\s*"?([^";\s]+)"?/i);
+          if (charsetMatch && charsetMatch[1]) charset = charsetMatch[1];
+        }
+
+        if (!bodyText.trim()) continue;
+        bodyText = bodyText.replace(/^\s+/, "");
+        const text = decodePartBody(bodyText, cte, charset || "utf-8");
+        if (text && text.trim()) {
+          return { kind: mime.toLowerCase() === "text/html" ? "html" : "text", content: text };
+        }
+      }
+      return null;
+    }
+
+    function extractInlineHtml(raw) {
+      const src = decodeHtmlEntities(String(raw || ""));
+      if (!src.trim()) return "";
+
+      const htmlPos = src.search(/<!doctype html|<html[\s>]/i);
+      if (htmlPos < 0) return "";
+
+      let chunk = src.slice(htmlPos);
+      const boundaryMatch = src.match(/boundary\s*=\s*"?([^";\r\n]+)"?/i);
+      if (boundaryMatch && boundaryMatch[1]) {
+        const endRe = new RegExp(`(?:\\r?\\n)--${escapeRegExp(boundaryMatch[1])}(?:--)?`);
+        const endIdx = chunk.search(endRe);
+        if (endIdx > 0) chunk = chunk.slice(0, endIdx);
+      }
+
+      if (/=[A-Fa-f0-9]{2}|=\r?\n/.test(chunk)) {
+        const decoded = decodeBytesWithCharset(decodeQuotedPrintableToBytes(chunk), "utf-8");
+        if (decoded && decoded.trim()) chunk = decoded;
+      }
+      chunk = decodeHtmlEntities(chunk);
+
+      const full = chunk.match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i);
+      if (full && full[0]) return full[0];
+      return /<html[\s>]/i.test(chunk) ? chunk : "";
+    }
+
+    function decodeHtmlEntities(input) {
+      const s = String(input || "");
+      if (!s.includes("&")) return s;
+      const t = document.createElement("textarea");
+      t.innerHTML = s;
+      return t.value;
+    }
+
+    function decodeHeaderValue(v) {
+      return decodeRfc2047Words(decodeHtmlEntities(String(v || ""))).trim();
+    }
+
+    function splitMultipartByBoundary(bodyText, boundary) {
+      const lines = String(bodyText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+      const marker = `--${boundary}`;
+      const endMarker = `--${boundary}--`;
+      const parts = [];
+      let current = [];
+      let inPart = false;
+      for (const line of lines) {
+        if (line.startsWith(endMarker)) {
+          if (inPart && current.length) parts.push(current.join("\n"));
+          break;
+        }
+        if (line.startsWith(marker)) {
+          if (inPart && current.length) parts.push(current.join("\n"));
+          inPart = true;
+          current = [];
+          continue;
+        }
+        if (inPart) current.push(line);
+      }
+      if (inPart && current.length) parts.push(current.join("\n"));
+      return parts;
+    }
+
+    function decodePartBody(bodyText, transferEncoding, charset) {
+      const enc = String(transferEncoding || "").trim().toLowerCase();
+      if (enc.includes("base64")) return decodeBytesWithCharset(decodeBase64ToBytes(bodyText), charset);
+      if (enc.includes("quoted-printable")) return decodeBytesWithCharset(decodeQuotedPrintableToBytes(bodyText), charset);
+      const bytes = Uint8Array.from(String(bodyText || ""), (ch) => ch.charCodeAt(0) & 0xFF);
+      return decodeBytesWithCharset(bytes, charset);
+    }
+
+    function parseMimeEntity(raw) {
+      const { headerText, bodyText } = splitHeaderBody(raw);
+      const headers = parseHeaders(headerText);
+      const ct = parseContentType(headers["content-type"] || "text/plain; charset=utf-8");
+      const cte = headers["content-transfer-encoding"] || "";
+      const disposition = String(headers["content-disposition"] || "").toLowerCase();
+
+      if (ct.type.startsWith("multipart/") && ct.params.boundary) {
+        const parts = splitMultipartByBoundary(bodyText, ct.params.boundary)
+          .map((p) => parseMimeEntity(p))
+          .filter(Boolean);
+        return { multipart: true, headers, type: ct.type, disposition, parts };
+      }
+
+      const text = decodePartBody(bodyText, cte, ct.params.charset || "utf-8");
+      return { multipart: false, headers, type: ct.type, disposition, text };
+    }
+
+    function flattenMimeParts(node, out = []) {
+      if (!node) return out;
+      if (node.multipart) {
+        for (const p of node.parts || []) flattenMimeParts(p, out);
+      } else {
+        out.push(node);
+      }
+      return out;
+    }
+
+    function chooseBestPart(root) {
+      const parts = flattenMimeParts(root).filter((p) => !(p.disposition || "").includes("attachment"));
+      const html = parts.find((p) => (p.type || "").startsWith("text/html") && (p.text || "").trim());
+      if (html) return { kind: "html", content: html.text };
+      const plain = parts.find((p) => (p.type || "").startsWith("text/plain") && (p.text || "").trim());
+      if (plain) return { kind: "text", content: plain.text };
+      const firstText = parts.find((p) => (p.text || "").trim());
+      return firstText ? { kind: "text", content: firstText.text } : null;
+    }
+
+    function toVisualContent(raw) {
+      const src = String(raw || "");
+      if (!src.trim()) return { kind: "text", content: "" };
+
+      const inlineHtml = extractInlineHtml(src);
+      if (inlineHtml) return { kind: "html", content: inlineHtml };
+
+      if (/<html[\s>]|<body[\s>]|<!doctype html/i.test(src)) {
+        return { kind: "html", content: src };
+      }
+
+      const looseHtml = extractMimePartLoose(src, "text/html");
+      if (looseHtml && looseHtml.content) return looseHtml;
+      const loosePlain = extractMimePartLoose(src, "text/plain");
+      if (loosePlain && loosePlain.content) return loosePlain;
+
+      const parsed = parseMimeEntity(src);
+      const best = chooseBestPart(parsed);
+      if (best && best.content && best.content.trim()) return best;
+
+      const b64Text = maybeBase64ToText(src);
+      if (b64Text) {
+        if (/<html[\s>]|<body[\s>]|<!doctype html/i.test(b64Text)) return { kind: "html", content: b64Text };
+        return { kind: "text", content: b64Text };
+      }
+
+      const qpTail = src.match(/Content-Transfer-Encoding:\s*quoted-printable[\s\S]*$/i);
+      if (qpTail && qpTail[0]) {
+        const qpDecoded = decodeBytesWithCharset(
+          decodeQuotedPrintableToBytes(qpTail[0].replace(/^.*?quoted-printable/i, "")),
+          "utf-8"
+        );
+        if (qpDecoded && qpDecoded.trim()) return { kind: "text", content: qpDecoded };
+      }
+
+      return { kind: "text", content: decodeRfc2047Words(src) };
+    }
+
+    function renderVisual(raw) {
+      const frame = $("renderFrame");
+      const visual = toVisualContent(raw);
+      if (!frame) return;
+      if (visual.kind === "html") {
+        frame.srcdoc = visual.content;
+        return;
+      }
+      frame.srcdoc =
+        `<!doctype html><html><body style="margin:0;padding:10px;font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;font-size:12px;line-height:1.42;">` +
+        `${escapeHtml(visual.content || "")}</body></html>`;
+    }
+
+    function renderMails() {
+      const list = $("mailList");
+      list.innerHTML = "";
+      if (!state.mails.length) {
+        list.innerHTML = `<div class="mail-item"><div class="m">暂无邮件</div></div>`;
+        state.activeIndex = -1;
+        renderMailDetail(null);
+        return;
+      }
+      state.mails.forEach((m, i) => {
+        const subject = pick(m, ["subject", "title"]) || "(no subject)";
+        const from = pick(m, ["from", "sender", "fromAddress"]) || "-";
+        const created = pick(m, ["createdAt", "created_at", "date", "time"]) || "-";
+        const el = document.createElement("div");
+        el.className = "mail-item" + (i === state.activeIndex ? " active" : "");
+        el.innerHTML = `<div class="s">${escapeHtml(subject)}</div><div class="m">${escapeHtml(from)} | ${escapeHtml(String(created))}</div>`;
+        el.onclick = () => {
+          state.activeIndex = i;
+          renderMails();
+          renderMailDetail(state.mails[i]);
+        };
+        list.appendChild(el);
+      });
+      if (state.activeIndex < 0) state.activeIndex = 0;
+      renderMailDetail(state.mails[state.activeIndex]);
+    }
+
+    function extractMetaFromRaw(raw) {
+      const { headerText } = splitHeaderBody(raw);
+      const headers = parseHeaders(headerText);
+      return {
+        subject: decodeHeaderValue(headers.subject || ""),
+        from: decodeHeaderValue(headers.from || ""),
+        to: decodeHeaderValue(headers.to || ""),
+        date: decodeHeaderValue(headers.date || ""),
+      };
+    }
+
+    function extractOtp(raw) {
+      const s = String(raw || "");
+      const decoded = decodeHtmlEntities(decodeRfc2047Words(s));
+      const patterns = [
+        /(?:验证码|代碼|代码|code)\D{0,24}(\d{6})/i,
+        />(\d{6})</,
+        /\b(\d{6})\b/g,
+      ];
+      for (const p of patterns) {
+        if (p.global) {
+          const all = [...decoded.matchAll(p)];
+          for (const m of all) {
+            if (m && m[1]) return m[1];
+          }
+        } else {
+          const m = decoded.match(p);
+          if (m && m[1]) return m[1];
+        }
+      }
+      return "";
+    }
+
+    function renderMailDetail(m) {
+      const raw = m ? extractRawData(m) : "";
+      const hdr = raw ? extractMetaFromRaw(raw) : {};
+      const otp = raw ? extractOtp(raw) : "";
+      $("metaSubject").textContent = m ? String(decodeHeaderValue(pick(m, ["subject", "title"])) || hdr.subject || "-") : "-";
+      $("metaFrom").textContent = m ? String(decodeHeaderValue(pick(m, ["from", "sender", "fromAddress"])) || hdr.from || "-") : "-";
+      $("metaTo").textContent = m ? String(decodeHeaderValue(pick(m, ["to", "recipient", "toAddress"])) || hdr.to || "-") : "-";
+      $("metaCreated").textContent = m ? String(pick(m, ["createdAt", "created_at", "date", "time"]) || hdr.date || "-") : "-";
+      $("metaOtp").textContent = otp || "-";
+      renderVisual(raw);
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    async function pullMails() {
+      const base = getWorkerBase();
+      const jwt = $("addressJwt").value.trim();
+      if (!jwt) throw new Error("address JWT 为空");
+      const data = await safeFetchJSON(`${base}/api/mails?limit=20&offset=0`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      const rows = Array.isArray(data.results) ? data.results : [];
+      state.mails = rows;
+      if (state.activeIndex >= rows.length) state.activeIndex = rows.length - 1;
+      renderMails();
+      setStatus(`拉取成功：${rows.length} 封邮件`, "ok");
+    }
+
+    function startOrStopPoll() {
+      if (state.pollOn) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = null;
+        state.pollOn = false;
+        $("btnTogglePoll").textContent = "开始轮询";
+        setStatus("已停止轮询", "warn");
+        return;
+      }
+      const sec = Math.max(2, Math.min(60, Number($("pollSec").value || 5)));
+      state.pollOn = true;
+      $("btnTogglePoll").textContent = "停止轮询";
+      state.pollTimer = setInterval(() => {
+        pullMails().catch((e) => setStatus(`轮询失败: ${e.message || e}`, "err"));
+      }, sec * 1000);
+      pullMails().catch((e) => setStatus(`轮询失败: ${e.message || e}`, "err"));
+      setStatus(`轮询已开启（${sec}s）`, "ok");
+    }
+
+    $("btnLoadCfg").onclick = () => loadConfig().catch((e) => setStatus(e.message || String(e), "err"));
+    $("btnLoadAccounts").onclick = () => loadAccounts().catch((e) => setStatus(e.message || String(e), "err"));
+    $("btnUseSelected").onclick = () => {
+      const v = $("accountSelect").value.trim();
+      if (!v) return setStatus("请先选择账号邮箱", "warn");
+      $("emailAddress").value = v;
+      setStatus(`已使用邮箱: ${v}`, "ok");
+    };
+    $("btnCreateTemp").onclick = () => createTempEmail().catch((e) => setStatus(e.message || String(e), "err"));
+    $("btnGetJwt").onclick = () => getJwtByEmail().catch((e) => setStatus(e.message || String(e), "err"));
+    $("btnPullMails").onclick = () => pullMails().catch((e) => setStatus(e.message || String(e), "err"));
+    $("btnTogglePoll").onclick = () => startOrStopPoll();
+
+    (async () => {
+      $("workerDomain").value = $("workerDomain").value || DEFAULTS.workerDomain;
+      $("adminPass").value = $("adminPass").value || DEFAULTS.adminPass;
+      $("emailDomain").value = $("emailDomain").value || DEFAULTS.emailDomain;
+      try { await loadConfig(); } catch {}
+      try { await loadAccounts(); } catch {}
+    })();
+  </script>
+</body>
+</html>

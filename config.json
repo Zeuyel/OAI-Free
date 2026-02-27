@@ -1,0 +1,17 @@
+{
+  "_comment": "codex.py 配置文件 - DuckMail 临时邮箱 + CPA OAuth",
+
+  "total_accounts": 5,
+
+  "duckmail_api_base": "https://api.duckmail.sbs",
+  "duckmail_bearer": "",
+
+  "proxy": "",
+
+  "cli_proxy_management_url": "http://127.0.0.1:8317/management.html#/oauth",
+  "cli_proxy_api_base": "http://127.0.0.1:8317",
+  "cli_proxy_password": "",
+
+  "accounts_file": "accounts.txt",
+  "csv_file": "registered_accounts.csv"
+}

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Go Team Auto Login",
+  "version": "0.1.0",
+  "description": "从 go-team-api 取号并自动执行 ChatGPT 登录填表（验证码与 hCaptcha 人工处理）。",
+  "permissions": [
+    "storage",
+    "cookies",
+    "tabs",
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://auth.openai.com/*",
+    "https://chatgpt.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Go Team Auto Login",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  }
+}

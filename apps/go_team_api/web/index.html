@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Go Team API Workspace</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="hero-copy">
+        <h1>Go Team API Workspace</h1>
+        <p>Hola Control Panel · 账号面板 + Team 管理</p>
+      </div>
+      <div class="row">
+        <input id="apiKey" placeholder="X-Api-Key（可选）" aria-label="API Key">
+        <button id="saveKeyBtn">保存 Key</button>
+        <button id="reloadAllBtn" class="primary">刷新全部</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="accountsPanel">账号面板</button>
+      <button class="tab" data-tab="teamsPanel">Team 管理</button>
+    </nav>
+
+    <section id="accountsPanel" class="panel active">
+      <div class="stats">
+        <article><span>总账号</span><b id="stTotal">-</b></article>
+        <article><span>Team 账号</span><b id="stTeam">-</b></article>
+        <article><span>Token Alive</span><b id="stAlive">-</b></article>
+        <article><span>Fed</span><b id="stFed">-</b></article>
+      </div>
+
+      <div class="toolbar">
+        <div class="row">
+          <input id="accSearch" placeholder="搜索 account_id / email / tags">
+          <select id="accTypeFilter"><option value="all">类型: all</option><option value="normal">normal</option><option value="team">team</option></select>
+          <select id="accTokenFilter"><option value="all">Token: all</option><option value="alive">alive</option><option value="dead">dead</option></select>
+        </div>
+        <div class="row">
+          <button id="toggleImportBtn">导入账号</button>
+          <button id="accRefreshBtn" class="primary">刷新账号</button>
+        </div>
+      </div>
+
+      <section id="importBox" class="importbox hidden">
+        <p>支持两种导入：粘贴文本、`account.txt` 一键导入。格式：`email:password[:type][:tags]`。</p>
+        <textarea id="importText" placeholder="tmp@example.com:pwd123:normal:invite_pool,fresh"></textarea>
+        <div class="row" style="margin-top:8px;">
+          <button id="importSubmitBtn" class="primary">粘贴文本导入</button>
+          <button id="importAccountTxtBtn">account.txt 导入</button>
+        </div>
+      </section>
+
+      <div class="tablewrap">
+        <table class="accounts-table">
+          <colgroup>
+            <col style="width:22%;">
+            <col style="width:11%;">
+            <col style="width:11%;">
+            <col style="width:14%;">
+            <col style="width:8%;">
+            <col style="width:12%;">
+            <col style="width:22%;">
+          </colgroup>
+          <thead><tr><th>Account / Email / Tags / Updated</th><th>Type</th><th>Token</th><th>Status</th><th>Team</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="accountsTbody"></tbody>
+        </table>
+      </div>
+      <div class="pager"><span id="accPageInfo"></span><div id="accPageNums" class="row"></div></div>
+    </section>
+
+    <section id="teamsPanel" class="panel">
+      <div class="toolbar">
+        <div class="row"><input id="teamSearch" placeholder="搜索邮箱 / Account ID / Team 名称"></div>
+        <div class="row"><button id="teamRefreshBtn" class="primary">刷新 Team</button></div>
+      </div>
+
+      <section class="card">
+        <h3>导入 Team Owner 账号</h3>
+        <p>参考 team-manage 批量导入：从 account_status.json 将 team_subscribed=true 的账号标记为 team owner，并自动补 Team。</p>
+        <div class="row">
+          <input id="ownerImportPath" placeholder="../../legacy/extension_backend/account_status.json">
+          <button id="importOwnersBtn" class="primary">导入 Team Owner</button>
+        </div>
+      </section>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>ID</th><th>邮箱</th><th>Account ID</th><th>Team 名称</th><th>成员数</th><th>订阅计划</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody id="teamsTbody"></tbody>
+        </table>
+      </div>
+      <div class="pager"><span id="teamPageInfo"></span><div id="teamPageNums" class="row"></div></div>
+    </section>
+  </main>
+
+  <div id="editTeamModal" class="modal hidden">
+    <div class="dialog wide">
+      <div class="modal-head">
+        <h3>编辑 Team</h3>
+        <p>配置基础信息、订阅参数与凭证，保存后立即生效。</p>
+      </div>
+      <div class="modal-body">
+        <section class="form-section">
+          <h4>基础信息</h4>
+          <div class="grid2 form-grid">
+            <label class="field"><span>Team ID</span><input id="editTeamId" readonly placeholder="team_id"></label>
+            <label class="field"><span>Team Name</span><input id="editTeamName" placeholder="team_name"></label>
+            <label class="field"><span>Owner Account ID</span><input id="editOwnerId" placeholder="owner_account_id"></label>
+            <label class="field"><span>Owner Email</span><input id="editTeamEmail" placeholder="owner email"></label>
+            <label class="field"><span>Account ID</span><input id="editTeamAccountId" placeholder="account_id"></label>
+            <label class="field"><span>Account Role</span><input id="editTeamRole" placeholder="account_role"></label>
+            <label class="field"><span>Status</span><select id="editTeamStatus"><option>active</option><option>full</option><option>expired</option><option>error</option><option>banned</option></select></label>
+            <label class="field"><span>Max Members</span><input id="editTeamMaxMembers" type="number" min="1" max="200" placeholder="max_members"></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <h4>订阅配置</h4>
+          <div class="grid2 form-grid">
+            <label class="field"><span>Subscription Plan</span><input id="editTeamPlan" placeholder="subscription_plan"></label>
+            <label class="field"><span>Expires At</span><input id="editTeamExpiresAt" placeholder="expires_at (RFC3339)"></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <h4>凭证信息</h4>
+          <div class="grid2 form-grid">
+            <label class="field full"><span>Access Token</span><input id="editTeamAccessToken" placeholder="access_token"></label>
+            <label class="field full"><span>Refresh Token</span><input id="editTeamRefreshToken" placeholder="refresh_token"></label>
+            <label class="field full"><span>Session Token</span><input id="editTeamSessionToken" placeholder="session_token"></label>
+            <label class="field full"><span>Client ID</span><input id="editTeamClientId" placeholder="client_id"></label>
+          </div>
+        </section>
+      </div>
+      <div class="modal-foot end row"><button data-close="editTeamModal">取消</button><button id="saveTeamBtn" class="primary">保存</button></div>
+    </div>
+  </div>
+
+  <div id="membersModal" class="modal hidden">
+    <div class="dialog wide">
+      <div class="modal-head">
+        <h3>成员管理</h3>
+        <p id="membersMeta">-</p>
+      </div>
+      <div class="modal-body">
+        <div class="grid2">
+          <section class="card soft">
+            <h4>新增邀请</h4>
+            <div class="row"><input id="addMemberEmail" placeholder="member@example.com"><button id="addMemberBtn" class="primary">发送邀请</button></div>
+          </section>
+          <section class="card soft">
+            <h4>一键邀请</h4>
+            <div class="row"><input id="oneClickCount" type="number" value="1" min="1" max="20"><button id="oneClickPoolBtn">invite_pool</button><button id="oneClickRandomBtn">随机池子</button></div>
+          </section>
+        </div>
+        <div class="grid2">
+          <section class="card"><h4>待加入 (invited)</h4><div class="tablewrap mini"><table><thead><tr><th>Email</th><th>Updated</th><th>Action</th></tr></thead><tbody id="invitedTbody"></tbody></table></div></section>
+          <section class="card"><h4>已加入 (joined)</h4><div class="tablewrap mini"><table><thead><tr><th>Email</th><th>Role</th><th>Action</th></tr></thead><tbody id="joinedTbody"></tbody></table></div></section>
+        </div>
+        <section class="card otp-panel">
+          <h4>一键取件（项目环境配置）</h4>
+          <p class="muted">使用后端 OTP 接口，Worker 配置来自服务端环境变量（如 <code>MAIL_WORKER_DOMAIN</code> / <code>MAIL_ADMIN_PASSWORD</code>）。</p>
+          <div class="row">
+            <input id="otpFetchAccountId" placeholder="invited account_id / email">
+            <input id="otpFetchTimeout" type="number" min="15" max="300" value="120" style="max-width:140px;">
+            <button id="otpFetchBtn" class="primary">一键取件</button>
+            <button id="otpLoadMailsBtn">拉取邮件</button>
+          </div>
+          <div id="otpFetchLog" class="otp-status">等待操作...</div>
+          <div class="mail-viewer-grid">
+            <div id="otpMailList" class="otp-mail-list"></div>
+            <div class="otp-mail-content">
+              <div id="otpMailMeta" class="otp-mail-meta">未选择邮件</div>
+              <iframe id="otpMailFrame" class="otp-mail-frame" sandbox=""></iframe>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="modal-foot end"><button data-close="membersModal">关闭</button></div>
+    </div>
+  </div>
+
+  <div id="ownerCheckModal" class="modal hidden">
+    <div class="dialog">
+      <div class="modal-head">
+        <h3>Owner 测活</h3>
+        <p id="ownerCheckMeta">-</p>
+      </div>
+      <div class="modal-body">
+        <pre id="ownerCheckLog"></pre>
+      </div>
+      <div class="modal-foot end row"><button data-close="ownerCheckModal">关闭</button><button id="ownerCheckRunBtn" class="primary">立即测活</button></div>
+    </div>
+  </div>
+
+  <div id="deleteAccountModal" class="modal hidden">
+    <div class="dialog danger">
+      <div class="modal-head">
+        <h3>删除账号</h3>
+        <p>账号会从账号池移除，同时清理相关 Team 邀请记录。</p>
+      </div>
+      <div class="modal-body">
+        <div id="deleteAccountMeta" class="danger-note">-</div>
+        <label class="field">
+          <span>确认删除</span>
+          <input id="deleteAccountConfirmInput" placeholder="输入 DELETE 确认">
+        </label>
+      </div>
+      <div class="modal-foot end row">
+        <button data-close="deleteAccountModal">取消</button>
+        <button id="confirmDeleteAccountBtn" class="danger" disabled>确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
